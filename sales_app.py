@@ -15,22 +15,20 @@ st.set_page_config(
 
 # ==================================================
 # STEP 2: FILE PATHS
+# GitHub/Streamlit Cloud:
+# Keep all required files beside this script.
 # ==================================================
-BASE_DIR = Path(r"C:\Users\18645")
+BASE_DIR = Path(__file__).resolve().parent
 
-MODEL_PATH = BASE_DIR / "final_sales_forecasting_model.pkl"
-FEATURES_PATH = BASE_DIR / "final_sales_feature_names.pkl"
+MODEL_PATH = BASE_DIR / "linear_regression_sales_model.pkl"
+FEATURES_PATH = BASE_DIR / "linear_regression_sales_features.pkl"
+DATA_PATH = BASE_DIR / "New_Query_2026_10_22_10_01_37.csv"
 
-DATA_PATH = (
-    BASE_DIR
-    / "Downloads"
-    / "New_Query_2026_10_22_10_01_37.csv"
-)
 
 # ==================================================
 # STEP 3: LOAD MODEL AND FEATURES
+# Removed cache_resource to avoid reusing an old model.
 # ==================================================
-@st.cache_resource
 def load_model():
     with open(MODEL_PATH, "rb") as file:
         model = pickle.load(file)
@@ -55,8 +53,7 @@ def load_historical_data():
             "CSV file must contain OrderDate and Sales columns."
         )
 
-    # Parse dates as UTC, then remove timezone information.
-    # This prevents timezone-aware vs timezone-naive comparison errors.
+    # Convert dates to timezone-naive timestamps
     df["OrderDate"] = (
         pd.to_datetime(
             df["OrderDate"],
@@ -79,7 +76,7 @@ def load_historical_data():
             "No valid historical sales data found."
         )
 
-    # Aggregate all orders recorded on the same date
+    # Aggregate sales for each date
     daily_sales = (
         df.groupby("OrderDate")["Sales"]
         .sum()
@@ -87,7 +84,7 @@ def load_historical_data():
     )
 
     # Fill missing calendar dates with zero.
-    # This assumption should be verified against the source data.
+    # Use this only if missing dates represent zero sales.
     full_dates = pd.date_range(
         start=daily_sales.index.min(),
         end=daily_sales.index.max(),
@@ -107,6 +104,7 @@ def load_historical_data():
 
 # ==================================================
 # STEP 5: CREATE MODEL FEATURES
+# These must match the training features.
 # ==================================================
 def create_features(history):
     return {
@@ -132,15 +130,12 @@ def generate_forecast(
     start_date,
     forecast_days
 ):
-    # Selected forecast date without timezone information
     start_timestamp = (
         pd.Timestamp(start_date)
-        .tz_localize(None)
         .normalize()
     )
 
-    # Use only historical sales before the selected date.
-    # This also allows historical backtesting.
+    # Use sales before the selected forecast date
     history = historical_sales.loc[
         historical_sales.index < start_timestamp
     ].copy()
@@ -155,8 +150,7 @@ def generate_forecast(
         historical_sales.index.max().normalize()
     )
 
-    # Do not use old data to pretend to forecast a distant
-    # future period when intervening actual data is unavailable.
+    # Prevent forecasting distant future dates using stale history
     if start_timestamp > (
         last_historical_date + pd.Timedelta(days=1)
     ):
@@ -177,7 +171,7 @@ def generate_forecast(
 
     for forecast_date in forecast_dates:
 
-        # Calculate the same five features used during training
+        # Generate the five input features
         feature_values = create_features(history)
 
         input_df = pd.DataFrame(
@@ -185,7 +179,7 @@ def generate_forecast(
             columns=feature_names
         )
 
-        # Predict sales using the saved Linear Regression model
+        # Predict sales with Linear Regression
         prediction = float(
             np.asarray(
                 model.predict(input_df)
@@ -202,8 +196,7 @@ def generate_forecast(
 
         predictions.append(prediction)
 
-        # Add this prediction to history for forecasting
-        # the next day recursively
+        # Use the prediction to forecast the next day
         history.loc[forecast_date] = prediction
 
     forecast_df = pd.DataFrame({
@@ -244,12 +237,12 @@ try:
 
     model, feature_names = load_model()
 
-    # Verify that the saved model is Linear Regression
+    # Verify the saved model type
     if type(model).__name__ != "LinearRegression":
         st.error(
             f"Expected LinearRegression, but loaded "
-            f"{type(model).__name__}. Please save your trained "
-            "Linear Regression model to the configured model path."
+            f"{type(model).__name__}. Please check the model file "
+            "uploaded to GitHub."
         )
         st.stop()
 
@@ -271,8 +264,12 @@ try:
         st.stop()
 
     st.success(
-        "Forecasting model and historical data loaded successfully!"
+        "Linear Regression model and historical data loaded successfully!"
     )
+
+    # Show which model file and model type are in use
+    st.caption(f"Model file: {MODEL_PATH.name}")
+    st.caption(f"Loaded model: {type(model).__name__}")
 
 except Exception as error:
     st.error("Unable to load the forecasting resources.")
@@ -304,7 +301,6 @@ st.subheader("Forecast Settings")
 col1, col2 = st.columns(2)
 
 with col1:
-    # Default date is one day after the latest historical date
     default_forecast_date = (
         pd.Timestamp(historical_end_date)
         + pd.Timedelta(days=1)
@@ -473,7 +469,7 @@ if st.button(
         )
 
         # ==========================================
-        # STEP 16: DOWNLOAD CSV
+        # STEP 16: DOWNLOAD FORECAST CSV
         # ==========================================
         csv_data = forecast_df[
             ["ForecastDate", "PredictedSales"]
