@@ -14,9 +14,12 @@ st.set_page_config(
 # ==================================================
 # STEP 2: FASTAPI BACKEND URL
 # ==================================================
-API_BASE_URL = "https://sales-forecasting1-2.onrender.com"
-
-
+API_URL = "https://sales-forecasting1-2.onrender.com"
+response = requests.get(f"{API_URL}/health", timeout=30)response = requests.get(
+    f"{API_URL}/forecast",
+    params={"days": forecast_days},
+    timeout=180
+)
 # ==================================================
 # STEP 3: DASHBOARD HEADER
 # ==================================================
