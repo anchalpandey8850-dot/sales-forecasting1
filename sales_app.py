@@ -30,6 +30,7 @@ st.write(
 st.divider()
 
 # ==================================================
+# ==================================================
 # STEP 4: CHECK BACKEND STATUS
 # ==================================================
 try:
@@ -38,21 +39,30 @@ try:
         timeout=60
     )
 
-    health_response.raise_for_status()
-    health_data = health_response.json()
+    st.write("HTTP Status Code:", health_response.status_code)
+    st.write(
+        "Content-Type:",
+        health_response.headers.get("content-type")
+    )
 
-    if health_data.get("status") == "healthy":
-        st.success("FastAPI backend is connected and healthy.")
-    else:
-        st.warning(f"Backend response: {health_data}")
+    st.write("Raw API Response:", health_response.text[:500])
+
+    health_response.raise_for_status()
+
+    try:
+        health_data = health_response.json()
+
+        if health_data.get("status") == "healthy":
+            st.success("FastAPI backend is connected and healthy.")
+        else:
+            st.warning(f"Backend response: {health_data}")
+
+    except ValueError:
+        st.error("Backend did not return valid JSON.")
 
 except requests.exceptions.RequestException as error:
-    st.error(
-        "Could not connect to the FastAPI backend. "
-        "Please check your Render service."
-    )
-    st.caption(f"Connection details: {error}")
-
+    st.error("Unable to connect to FastAPI backend.")
+    st.exception(error)
 # ==================================================
 # STEP 5: FORECAST SETTINGS
 # ==================================================
