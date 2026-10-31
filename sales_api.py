@@ -3,14 +3,12 @@ import pickle
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 
-# Load saved model
-with open("final_sales_forecasting_model.pkl", "rb") as file:
+with open("linear_regression_sales_model.pkl", "rb") as file:
     loaded_model = pickle.load(file)
 
-# Load feature names
-with open("final_sales_feature_names.pkl", "rb") as file:
+with open("linear_regression_sales_features.pkl", "rb") as file:
     feature_names = pickle.load(file)
-
+    
 # Load historical sales data
 history_df = pd.read_csv("daily_sales_history.csv")
 
