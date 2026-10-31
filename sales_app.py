@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -14,12 +15,8 @@ st.set_page_config(
 # ==================================================
 # STEP 2: FASTAPI BACKEND URL
 # ==================================================
-API_URL = "https://sales-forecasting1-2.onrender.com"
-response = requests.get(f"{API_URL}/health", timeout=30)response = requests.get(
-    f"{API_URL}/forecast",
-    params={"days": forecast_days},
-    timeout=180
-)
+API_BASE_URL = "https://sales-forecasting1-2.onrender.com"
+
 # ==================================================
 # STEP 3: DASHBOARD HEADER
 # ==================================================
@@ -32,18 +29,16 @@ st.write(
 
 st.divider()
 
-
 # ==================================================
 # STEP 4: CHECK BACKEND STATUS
 # ==================================================
 try:
     health_response = requests.get(
         f"{API_BASE_URL}/health",
-        timeout=30
+        timeout=60
     )
 
     health_response.raise_for_status()
-
     health_data = health_response.json()
 
     if health_data.get("status") == "healthy":
@@ -52,14 +47,11 @@ try:
         st.warning(f"Backend response: {health_data}")
 
 except requests.exceptions.RequestException as error:
-
     st.error(
         "Could not connect to the FastAPI backend. "
-        "The Render service may be starting up or temporarily unavailable."
+        "Please check your Render service."
     )
-
     st.caption(f"Connection details: {error}")
-
 
 # ==================================================
 # STEP 5: FORECAST SETTINGS
@@ -75,18 +67,16 @@ forecast_days = st.selectbox(
 
 st.info(
     f"**Forecast duration:** {forecast_days} days\n\n"
-    "The API automatically starts from the day after the last "
-    "date in its historical sales dataset."
+    "The API automatically starts from the day after "
+    "the last date in its historical sales dataset."
 )
 
 st.caption(
-    "The current backend does not accept a custom forecast start date. "
     "Forecast dates are taken directly from the API response."
 )
 
-
 # ==================================================
-# STEP 6: CALL FASTAPI AND GENERATE FORECAST
+# STEP 6: GENERATE FORECAST
 # ==================================================
 if st.button(
     "Generate Sales Forecast",
@@ -95,7 +85,6 @@ if st.button(
 ):
 
     try:
-
         with st.spinner(
             "Connecting to FastAPI and generating forecast..."
         ):
@@ -107,7 +96,6 @@ if st.button(
             )
 
             response.raise_for_status()
-
             result = response.json()
 
         # Validate API response
@@ -122,34 +110,23 @@ if st.button(
 
         if missing_keys:
             raise ValueError(
-                f"API response is missing required fields: {missing_keys}"
+                f"Missing API fields: {missing_keys}"
             )
 
         if not result["forecast"]:
-            raise ValueError(
-                "The API returned an empty forecast."
-            )
+            raise ValueError("API returned an empty forecast.")
 
-        # Convert API response into DataFrame
-        forecast_df = pd.DataFrame(
-            result["forecast"]
-        )
+        # Convert response into DataFrame
+        forecast_df = pd.DataFrame(result["forecast"])
 
-        expected_columns = {
-            "date",
-            "predicted_sales"
-        }
-
-        missing_columns = expected_columns - set(
-            forecast_df.columns
-        )
+        expected_columns = {"date", "predicted_sales"}
+        missing_columns = expected_columns - set(forecast_df.columns)
 
         if missing_columns:
             raise ValueError(
-                f"Forecast rows are missing columns: {missing_columns}"
+                f"Missing forecast columns: {missing_columns}"
             )
 
-        # Convert date and sales columns
         forecast_df["ForecastDate"] = pd.to_datetime(
             forecast_df["date"],
             errors="raise"
@@ -160,51 +137,37 @@ if st.button(
             errors="raise"
         )
 
+        if forecast_df["PredictedSales"].isna().any():
+            raise ValueError("Invalid sales predictions received.")
+
         forecast_df = forecast_df.sort_values(
             "ForecastDate"
         ).reset_index(drop=True)
 
-        if forecast_df["PredictedSales"].isna().any():
-            raise ValueError(
-                "The API returned invalid sales predictions."
-            )
-
-        # Create month column
+        # Month-wise aggregation
         forecast_df["Month"] = (
             forecast_df["ForecastDate"]
             .dt.to_period("M")
             .astype(str)
         )
 
-        # Monthly sales aggregation
         monthly_sales = (
-            forecast_df.groupby(
-                "Month",
-                as_index=False
-            )["PredictedSales"]
-            .sum()
+            forecast_df.groupby("Month", as_index=False)
+            ["PredictedSales"].sum()
         )
 
-        # Calculate summary metrics
-        total_sales = forecast_df[
-            "PredictedSales"
-        ].sum()
+        # Summary metrics
+        total_sales = forecast_df["PredictedSales"].sum()
+        average_sales = forecast_df["PredictedSales"].mean()
 
-        average_sales = forecast_df[
-            "PredictedSales"
-        ].mean()
-
-
-        # ==========================================
+        # ==================================================
         # STEP 7: FORECAST SUMMARY
-        # ==========================================
+        # ==================================================
         st.divider()
-
         st.subheader("Forecast Summary")
 
         st.caption(
-            f"Forecast period: "
-            f"{result['forecast_start_date']} "
+            f"Forecast period: {result['forecast_start_date']} "
             f"to {result['forecast_end_date']}"
         )
 
@@ -225,17 +188,13 @@ if st.button(
             f"{average_sales:,.2f}"
         )
 
-
-        # ==========================================
+        # ==================================================
         # STEP 8: MONTHLY BAR CHART
-        # ==========================================
+        # ==================================================
         st.divider()
-
         st.subheader("Monthly Predicted Sales")
 
-        monthly_chart = monthly_sales.set_index(
-            "Month"
-        )
+        monthly_chart = monthly_sales.set_index("Month")
 
         st.bar_chart(
             monthly_chart[["PredictedSales"]],
@@ -254,17 +213,13 @@ if st.button(
             hide_index=True
         )
 
-
-        # ==========================================
+        # ==================================================
         # STEP 9: DAILY LINE CHART
-        # ==========================================
+        # ==================================================
         st.divider()
-
         st.subheader("Daily Sales Forecast")
 
-        daily_chart = forecast_df.set_index(
-            "ForecastDate"
-        )
+        daily_chart = forecast_df.set_index("ForecastDate")
 
         st.line_chart(
             daily_chart[["PredictedSales"]],
@@ -272,12 +227,10 @@ if st.button(
             y_label="Predicted Sales"
         )
 
-
-        # ==========================================
+        # ==================================================
         # STEP 10: DAILY FORECAST TABLE
-        # ==========================================
+        # ==================================================
         st.divider()
-
         st.subheader("Daily Forecast Details")
 
         display_df = forecast_df[
@@ -295,10 +248,9 @@ if st.button(
             hide_index=True
         )
 
-
-        # ==========================================
+        # ==================================================
         # STEP 11: DOWNLOAD FORECAST
-        # ==========================================
+        # ==================================================
         st.download_button(
             label="Download Forecast CSV",
             data=display_df.to_csv(
@@ -309,12 +261,10 @@ if st.button(
             use_container_width=True
         )
 
-
     # ==================================================
     # ERROR HANDLING
     # ==================================================
-    except requests.exceptions.HTTPError:
-
+    except requests.exceptions.HTTPError as error:
         try:
             details = response.json().get(
                 "detail",
@@ -323,34 +273,20 @@ if st.button(
         except Exception:
             details = response.text
 
-        st.error(
-            f"FastAPI returned an error: {details}"
-        )
+        st.error(f"FastAPI returned an error: {details}")
 
     except requests.exceptions.Timeout:
-
         st.error(
-            "The request timed out. Render may be waking up "
-            "or the forecast is taking longer than expected. "
+            "Request timed out. Render may be waking up. "
             "Please try again."
         )
 
     except requests.exceptions.RequestException as error:
-
-        st.error(
-            f"Unable to reach the FastAPI backend: {error}"
-        )
+        st.error(f"Unable to reach FastAPI: {error}")
 
     except (ValueError, KeyError, TypeError) as error:
-
-        st.error(
-            f"Unable to process the API forecast response: {error}"
-        )
+        st.error(f"Unable to process forecast response: {error}")
 
     except Exception as error:
-
-        st.error(
-            "An unexpected error occurred while generating the forecast."
-        )
-
+        st.error("An unexpected error occurred.")
         st.exception(error)
