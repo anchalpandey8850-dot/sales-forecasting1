@@ -15,7 +15,7 @@ st.set_page_config(
 # ==================================================
 # STEP 2: FASTAPI BACKEND URL
 # ==================================================
-API_BASE_URL = "https://sales-forecasting1-2.onrender.com"
+API_BASE_URL = "https://sales-forecasting1-5.onrender.com"
 
 # ==================================================
 # STEP 3: DASHBOARD HEADER
